@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root {
+            --primary: #070707;
+            --available: #36f90f;
+            --occupied: #f13608;
+            --gate-open: #02f917;
+            --gate-closed: #e74c3c;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f5f7fa;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .dashboard {
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .connection-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.2);
+        }
+        
+        .connection-status.connected {
+            background: rgba(46, 204, 113, 0.2);
+        }
+        
+        .connection-status.disconnected {
+            background: rgba(231, 76, 60, 0.2);
+        }
+        
+        .slots-container {
+            padding: 30px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+        
+        .slot {
+            height: 180px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .slot.available {
+            background: linear-gradient(135deg, var(--available), #38a3d1);
+        }
+        
+        .slot.occupied {
+            background: linear-gradient(135deg, var(--occupied), #d61a6b);
+        }
+        
+        .slot-number {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .slot-status {
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 500;
+        }
+        
+        .gate-control {
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+        
+        .gate-btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin: 0 10px;
+        }
+        
+        .gate-btn.open {
+            background: var(--gate-open);
+        }
+        
+        .gate-btn.close {
+            background: var(--gate-closed);
+        }
+        
+        .gate-status {
+            margin-bottom: 15px;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        
+        .gate-status.open {
+            color: var(--gate-open);
+        }
+        
+        .gate-status.closed {
+            color: var(--gate-closed);
+        }
+        
+        .last-updated {
+            text-align: center;
+            padding: 15px;
+            color: #6c757d;
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div class="header">
+            <div class="connection-status" id="connection-status">Connecting...</div>
+            <h1>Smart Parking System</h1>
+            <p>Real-time Monitoring</p>
+        </div>
+        
+        <div class="slots-container">
+            <div class="slot" id="slot1">
+                <div class="slot-number">SLOT-1</div>
+                <div class="slot-status" id="slot1-status">Loading...</div>
+            </div>
+            <div class="slot" id="slot2">
+                <div class="slot-number">SLOT-2</div>
+                <div class="slot-status" id="slot2-status">Loading...</div>
+            </div>
+            <div class="slot" id="slot3">
+                <div class="slot-number">SLOT-3</div>
+                <div class="slot-status" id="slot3-status">Loading...</div>
+            </div>
+        </div>
+        
+        <div class="gate-control">
+            <div class="gate-status" id="gate-status">Gate: Loading...</div>
+            <button class="gate-btn open" id="open-gate">OPEN GATE</button>
+            <button class="gate-btn close" id="close-gate">CLOSE GATE</button>
+        </div>
+        
+        <div class="last-updated" id="last-updated">
+            Last updated: <span id="update-time">Loading...</span>
+        </div>
+    </div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBTZJi2J0NMr6cQCiIU1kiZNC6bUhJ7gwM",
+            authDomain: "smartparkingesp32-6e893.firebaseapp.com",
+            databaseURL: "https://smartparkingesp32-6e893-default-rtdb.firebaseio.com",
+            projectId: "smartparkingesp32-6e893",
+            storageBucket: "smartparkingesp32-6e893.firebasestorage.app",
+            messagingSenderId: "117278002603",
+            appId: "1:117278002603:web:1caaa5be011d65673a16ee"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const slotsRef = database.ref('slots');
+        const gateRef = database.ref('gate');
+
+        // DOM Elements
+        const connectionStatus = document.getElementById('connection-status');
+        const gateStatus = document.getElementById('gate-status');
+        const openGateBtn = document.getElementById('open-gate');
+        const closeGateBtn = document.getElementById('close-gate');
+        const updateTime = document.getElementById('update-time');
+
+        // Update timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            updateTime.textContent = now.toLocaleTimeString();
+        }
+
+        // Update connection status
+        function updateConnectionStatus(connected) {
+            if (connected) {
+                connectionStatus.textContent = "Connected";
+                connectionStatus.classList.add('connected');
+                connectionStatus.classList.remove('disconnected');
+            } else {
+                connectionStatus.textContent = "Disconnected";
+                connectionStatus.classList.add('disconnected');
+                connectionStatus.classList.remove('connected');
+            }
+        }
+
+        // Updated: Update slot UI with if...else
+        function updateSlot(slotId, isAvailable) {
+            const slot = document.getElementById(slotId);
+            const statusElement = document.getElementById(`${slotId}-status`);
+
+            if (isAvailable) {
+                slot.classList.remove('available');
+                slot.classList.add('occupied');
+                statusElement.textContent = 'Occupied';
+            } else {
+
+                slot.classList.remove('occupied');
+                slot.classList.add('available');
+                statusElement.textContent = 'Available';
+                
+            }
+            updateTimestamp();
+        }
+
+        // Update gate UI
+        function updateGate(status) {
+            const isOpen = status === 'Opened';
+            if (isOpen) {
+                gateStatus.textContent = "Gate: OPENED";
+                gateStatus.classList.add('open');
+                gateStatus.classList.remove('closed');
+                openGateBtn.disabled = true;
+                closeGateBtn.disabled = false;
+            } else {
+                gateStatus.textContent = "Gate: CLOSED";
+                gateStatus.classList.add('closed');
+                gateStatus.classList.remove('open');
+                openGateBtn.disabled = false;
+                closeGateBtn.disabled = true;
+            }
+            updateTimestamp();
+        }
+
+        // Firebase listeners
+        function setupFirebaseListeners() {
+            database.ref('.info/connected').on('value', (snapshot) => {
+                updateConnectionStatus(snapshot.val());
+            });
+
+            slotsRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    if (data.slot1 !== undefined) updateSlot('slot1', data.slot1);
+                    if (data.slot2 !== undefined) updateSlot('slot2', data.slot2);
+                    if (data.slot3 !== undefined) updateSlot('slot3', data.slot3);
+                }
+            });
+
+            gateRef.on('value', (snapshot) => {
+                const status = snapshot.val();
+                if (status !== null) {
+                    updateGate(status);
+                }
+            });
+        }
+
+        // Gate control
+        function openGate() {
+            gateRef.set('Opened')
+                .then(() => console.log("Gate opened"))
+                .catch(error => console.error("Error opening gate:", error));
+        }
+
+        function closeGate() {
+            gateRef.set('Closed')
+                .then(() => console.log("Gate closed"))
+                .catch(error => console.error("Error closing gate:", error));
+        }
+
+        // Event listeners
+        openGateBtn.addEventListener('click', openGate);
+        closeGateBtn.addEventListener('click', closeGate);
+
+        // Initialize
+        setupFirebaseListeners();
+        updateTimestamp();
+    </script>
+</body>
+</html>
